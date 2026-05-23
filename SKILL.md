@@ -146,12 +146,13 @@ The script automatically:
 
 ### Phase 5: Model Selection
 
-Stitch defaults to a standard model. **Switch to Gemini 3.1 Pro** in the Stitch UI for deeper design reasoning:
+Stitch defaults to a standard model. **Always switch to the most capable model available** in the Stitch UI — this changes over time as Google releases new models. At time of writing (May 2026), the top model is "Gemini 3.1 Pro", but always check the model selector for the newest option.
+
+The rule: **pick the model with the highest version number or the one labeled "Pro" / "Ultra" / "Max"** — whichever is the most powerful in the dropdown list.
 
 - Click the model selector in the top-left corner of Stitch
-- Select **Gemini 3.1 Pro**
-- 3.1 Pro's reasoning depth produces more nuanced, creative designs
-- Trade-off: longer generation time (~60-120s vs 30-60s)
+- Select the top-tier model (more parameters → deeper design reasoning → more nuanced, creative output)
+- Trade-off: longer generation time (~60-120s vs 30-60s for standard models)
 
 > Manual step — the script can't automate the model dropdown yet (requires UI interaction within the iframe).
 
