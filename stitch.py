@@ -270,15 +270,32 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
 
         frame = stitch.frames[1]
 
-        # 选择平台「網頁」
+        # 选择平台「網頁」(Web) — 而不是「應用程式」(App)
+        platform_selected = False
         try:
+            # 先检测当前是否已经选中「網頁」
             web_btn = frame.locator('button:has-text("網頁")')
+            app_btn = frame.locator('button:has-text("應用程式")')
             if web_btn.count() > 0:
                 web_btn.first.click()
                 stitch.wait_for_timeout(1500)
-                print('→ 已选择「網頁」平台')
-        except Exception:
-            pass  # 可能已经选好了
+                print('→ 已选择「網頁」(Web) 平台')
+                platform_selected = True
+            elif app_btn.count() > 0:
+                # 如果看到「應用程式」按钮说明还没选 Web，先尝试找 Web 按钮
+                web_alt = frame.locator('button:has-text("Web")')
+                if web_alt.count() > 0:
+                    web_alt.first.click()
+                    stitch.wait_for_timeout(1500)
+                    print('→ 已选择 Web 平台')
+                    platform_selected = True
+                else:
+                    print('→ 当前显示为「應用程式」模式，但未找到 Web 切换按钮，可能已经是 Web 模式')
+        except Exception as e:
+            print(f'→ 平台选择跳过: {e}')
+
+        if not platform_selected:
+            print('→ 注意：请确认 Stitch 中已选择「網頁」平台（不是「應用程式」），否则会生成手机端设计')
 
         # 输入 prompt
         print('→ 输入设计 prompt...')

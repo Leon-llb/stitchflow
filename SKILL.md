@@ -1,6 +1,6 @@
 ---
 name: stitchflow
-description: "AI-powered UI design workflow via Google Stitch + Chrome CDP + Playwright. Reads your project context first, then crafts tailored prompts — no generic AI aesthetics. Use when the user asks to design a UI, dashboard, landing page, or web app interface. Cross-platform: macOS / Windows / Linux."
+description: "Automates the entire UI design pipeline through Google Stitch: reads your project context (CLAUDE.md, brand data, product specs), crafts tailored prompts (no generic templates), controls Chrome via CDP+Playwright, captures full-page screenshots, exports HTML/CSS. Zero API keys — uses your existing Google Stitch access through your logged-in Chrome browser. Use when the user asks to design a UI, dashboard, landing page, or web app interface. Cross-platform: macOS / Windows / Linux."
 compatibility: "requires: python3, playwright, google-chrome-logged-into-stitch"
 license: MIT
 metadata:

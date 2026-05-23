@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">Stitchflow</h1>
-<p align="center"><strong>AI-Powered UI Design Workflow — One Skill, 27+ Agent Platforms</strong></p>
+<p align="center"><strong>让 AI 编程助手帮你做 UI 设计 — 自动读项目、写提示词、操作 Google Stitch 出图</strong></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platform">
@@ -15,133 +15,143 @@
 
 ---
 
-Automates the full **UI design pipeline** for AI coding agents: understand your project → craft tailored design prompts → generate in [Google Stitch](https://stitch.withgoogle.com/) → capture results. No API keys needed — connects to your already-logged-in Chrome browser via CDP.
+## 这个项目是干嘛的？
 
-**Unlike Google's [stitch-skills](https://github.com/google-labs-code/stitch-skills) (MCP server approach), Stitchflow uses direct browser CDP automation — no MCP setup required.**
+平常你让 AI 帮你设计一个网页界面、Dashboard 或者 Landing Page，AI 只能靠文字描述，或者用代码画个大概。你想看到真正好看的设计稿，就得自己打开 Figma 画，或者打开 Google Stitch 手动输入提示词。
 
-### Why Stitchflow?
+Stitchflow 做的事情就是：**让 AI 自动帮你操作 Google Stitch 出设计图**。你只需要告诉 AI「我想要一个电商数据看板」，AI 会先去读你项目的实际资料（品牌色、产品数据、用户画像），然后写一段真正贴合你业务的提示词，自动打开 Stitch 生成设计稿，最后截图给你看。满意了就导出 HTML/CSS 代码，AI 再帮你转成实际可用的前端代码。
 
-- **Project-aware prompts** — reads your CLAUDE.md, brand data, and product specs before writing prompts. No generic AI aesthetics
-- **No API billing** — uses your existing Google Stitch access through your logged-in browser
-- **Cross-platform** — macOS, Windows, and Linux all supported
-- **Cross-agent** — one SKILL.md works on Claude Code, Codex, OpenClaw, Hermes, Cursor, and 22+ others
-- **agentskills.io certified** — follows the open Agent Skills standard
+整个过程你不需要手动打开 Stitch、不需要自己琢磨提示词怎么写、不需要复制粘贴。AI 全自动完成。
 
----
+## 和谷歌官方的 stitch-skills 有什么不同？
 
-## Quick Start
+谷歌有一个 [stitch-skills](https://github.com/google-labs-code/stitch-skills) 项目，它是通过 MCP 服务器来调用 Stitch 的。但它做不到「从你的项目里自动提取上下文再生成设计」这个闭环。
+
+Stitchflow 的做法不同：它不是 MCP，而是直接通过 Chrome DevTools Protocol (CDP) 操控你已经登录了 Google 账号的浏览器。好处是：
+
+- **不需要 API Key**：用的是你浏览器里已经登录的 Google 账号
+- **不需要额外配置**：不需要填任何 token 或者密钥
+- **自动读项目**：AI 会先读懂你的 CLAUDE.md、产品数据、品牌信息，再写提示词
+- **完整链路**：项目理解 → 提示词 → 生成设计 → 截图 → 导出代码 → AI 转成前端代码
+
+可以理解为：stitch-skills 给你的是工具箱，Stitchflow 给你的是全自动流水线。
+
+## 安装
 
 ```bash
-# 1. Install dependencies
+# 1. 安装依赖
 pip install playwright && playwright install chromium
 
-# 2. Log into Google Stitch in your Chrome browser
-#    → Open https://stitch.withgoogle.com/ once
+# 2. 在 Chrome 浏览器里登录 Google 账号，然后打开 https://stitch.withgoogle.com/ 一次
 
-# 3. Launch Chrome in CDP mode
+# 3. 安装到你的 AI 编程助手
+# Claude Code:
+cp -r stitchflow ~/.claude/skills/
+
+# Codex CLI:
+cp -r stitchflow ~/.agents/skills/
+
+# OpenClaw:
+openclaw skill install --path ./stitchflow
+
+# Cursor / Hermes / Gemini CLI:
+cp -r stitchflow ~/.cursor/skills/     # Cursor
+cp -r stitchflow ~/.hermes/skills/     # Hermes
+cp -r stitchflow .agents/skills/       # Gemini CLI
+```
+
+## 怎么用？
+
+### 方式一：在你的 AI 助手里直接用（推荐）
+
+安装后，直接跟 AI 说：
+
+> 「帮我设计一个 SaaS 数据看板，深色主题」
+
+AI 会自动：
+1. 读取你项目的 CLAUDE.md、产品数据、品牌色
+2. 写一段贴合你业务的 Stitch 提示词
+3. 启动 Chrome CDP 模式
+4. 打开 Stitch、输入提示词、点生成
+5. 等待完成后截图给你看
+6. 你满意了就导出 HTML，AI 再转成前端代码
+
+### 方式二：命令行直接跑
+
+```bash
+# 首次使用：启动 CDP 模式的 Chrome（会关闭现有 Chrome 窗口）
 python3 stitch.py --launch-chrome
 
-# 4. Generate your first design
-python3 stitch.py "Design a modern SaaS analytics dashboard, dark theme, blue+green" --output dashboard.png
+# 生成设计
+python3 stitch.py "你的完整设计提示词" --output dashboard.png
+
+# 完整流程（启动 + 生成 + 导出）
+python3 stitch.py "你的提示词" --launch-chrome --output dashboard.png --export .stitch/designs/
 ```
 
-## Agent Platform Installation
-
-| Platform | Install Command | Invocation |
-|----------|----------------|------------|
-| **Claude Code** | `cp -r stitchflow ~/.claude/skills/` | `/stitchflow` |
-| **Codex CLI** | `cp -r stitchflow ~/.agents/skills/` | `$stitchflow` |
-| **OpenClaw** | `openclaw skill install --path ./stitchflow` | `stitchflow` |
-| **Hermes** | `cp -r stitchflow ~/.hermes/skills/` | auto-detected |
-| **Cursor** | `cp -r stitchflow ~/.cursor/skills/` | auto-detected |
-| **Gemini CLI** | `cp -r stitchflow .agents/skills/` | auto-detected |
-
-> All platforms share the same `SKILL.md` — `agentskills.io` open standard ensures Write Once, Run Anywhere.
-
-## How It Works
+## 工作流程（六个阶段）
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────┐
-│  Project      │ →   │  Tailored     │ →   │  Google       │ →   │  Design   │
-│  Context      │     │  Prompt       │     │  Stitch       │     │  Screenshot│
-│  (CLAUDE.md,  │     │  Engineering  │     │  Generation   │     │  (PNG)    │
-│   products)   │     │               │     │               │     │           │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────┘
+项目上下文 → 定制提示词 → Stitch 生成 → 截图确认 → 导出 HTML → AI 写代码
 ```
 
-1. **Phase 1 — Read**: Agent reads your project's CLAUDE.md, product data, brand assets
-2. **Phase 2 — Craft**: Writes a project-specific design prompt (not a generic template)
-3. **Phase 3 — Launch**: Starts Chrome in CDP mode with your logged-in profile
-4. **Phase 4 — Generate**: Automates Stitch — types prompt, clicks generate, waits
-5. **Phase 5 — Capture**: Full-page screenshot saved to your project directory
+| 阶段 | 谁在做 | 做什么 |
+|------|--------|--------|
+| 1. 读懂项目 | AI | 读取 CLAUDE.md、产品数据、品牌素材、现有 UI 代码 |
+| 2. 写提示词 | AI | 根据项目实际情况撰写 Stitch 提示词，包含品牌色、用户画像、页面结构、功能需求 |
+| 3. 启动浏览器 | 脚本 | 关闭现有 Chrome → 克隆 profile 保留登录态 → 以 CDP 模式重启 |
+| 4. 自动生成 | 脚本 | 连接 CDP → 打开 Stitch → 选择「網頁」平台 → 填入提示词 → 点击生成 → 轮询等待 |
+| 5. 截图确认 | AI | 截图展示给用户，用户确认方向 |
+| 6. 导出 + 写代码 | 脚本+AI | 导出 HTML/CSS → AI 读取 → 转成 React/Vue/静态页面 |
 
-## Prerequisites
+## 跨平台支持
 
-| Requirement | How to Check |
-|-------------|--------------|
-| Google account logged into Chrome | Open gmail.com — if you see your inbox, you're good |
-| Stitch accessed at least once | Open [stitch.withgoogle.com](https://stitch.withgoogle.com/) — if it loads, you're good |
-| Python 3.8+ | `python3 --version` |
-| Playwright | `pip install playwright && playwright install chromium` |
+| | macOS | Windows | Linux |
+|--|-------|---------|-------|
+| Chrome 路径 | `/Applications/Google Chrome.app/...` | `%PROGRAMFILES%\Google\Chrome\...` | `google-chrome` (PATH) |
+| Profile 路径 | `~/Library/Application Support/Google/Chrome` | `%LOCALAPPDATA%\Google\Chrome\User Data` | `~/.config/google-chrome` |
+| 特殊要求 | 无 | Chrome 136+ 需额外参数 | 无 |
 
-## Platform-Specific Notes
+## 跨 AI 助手兼容
 
-### macOS
-```bash
-python3 stitch.py --launch-chrome
-# Chrome profile cloned to /tmp to preserve cookies
-```
+一份 SKILL.md，兼容以下所有平台（遵循 [agentskills.io](https://agentskills.io) 开放标准）：
 
-### Windows
-```bash
-python stitch.py --launch-chrome
-# Chrome 136+ requires --disable-features=DevToolsDebuggingRestrictions
-```
+| 助手 | 安装路径 | 调用方式 |
+|------|---------|---------|
+| Claude Code | `~/.claude/skills/` | `/stitchflow` |
+| Codex CLI | `~/.agents/skills/` | `$stitchflow` |
+| OpenClaw | `openclaw skill install` | `stitchflow` |
+| Hermes | `~/.hermes/skills/` | 自动检测 |
+| Cursor | `~/.cursor/skills/` | 自动检测 |
+| Gemini CLI | `.agents/skills/` | 自动检测 |
 
-### Linux
-```bash
-python3 stitch.py --launch-chrome
-# Uses google-chrome from PATH
-```
+## 关于模型选择
 
-## Skill Structure
+Stitch 默认使用标准模型。如果你想要更细致、更有创意的设计，可以在 Stitch 界面左上角的模型选择器里切换为 **Gemini 3.1 Pro**。3.1 Pro 的深度推理能力更强，设计质量更高，但生成时间也会更长（约 60-120 秒 vs 30-60 秒）。
+
+> 目前模型切换还需要手动在浏览器里点一下，脚本暂时没法自动化这一步（因为模型选择器在 Stitch 的 iframe 内部，选择器不稳定）。
+
+## 文件结构
 
 ```
 stitchflow/
-├── SKILL.md          # English (agentskills.io compliant)
-├── SKILL.zh-CN.md    # Chinese (中文版)
-├── stitch.py         # Cross-platform CDP automation script
-├── icon.png          # Skill icon (1024×1024)
-├── README.md         # This file
+├── SKILL.md          # 英文版技能定义（给 AI 看的执行指南）
+├── SKILL.zh-CN.md    # 中文版技能定义
+├── stitch.py         # 核心脚本：CDP 启动 + Stitch 自动化 + 导出
+├── icon.png          # 技能图标 (1024×1024)
+├── README.md         # 本文件
 └── LICENSE           # MIT
 ```
 
-## Advanced: Standalone Script
+## 常见问题
 
-```bash
-# Full pipeline
-python3 stitch.py "your design prompt" --launch-chrome --output design.png
-
-# Just generate (CDP already running)
-python3 stitch.py "your design prompt" --output design.png
-```
-
-## Model Selection
-
-For best results, switch Stitch to **Gemini 3.1 Pro** (top-left model selector). 3.1 Pro's deeper reasoning produces more nuanced designs. Manual step for now.
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| "No Stitch iframe detected" | Open stitch.withgoogle.com in Chrome once to initialize |
-| "CDP connection refused" | Run `python3 stitch.py --launch-chrome` |
-| "Generate button not found" | Stitch UI may have changed; update selectors in stitch.py |
-| "Profile clone failed" (Windows) | Run as Administrator |
-
-## GitHub Topics
-
-`claude-code` `codex-cli` `openclaw` `hermes-agent` `cursor` `google-stitch` `ui-design` `ai-design` `cdp` `chrome-devtools-protocol` `playwright` `browser-automation` `design-automation` `cross-platform` `agentskills` `agent-skills` `developer-tools`
+| 问题 | 原因 | 解决办法 |
+|------|------|---------|
+| 「未检测到 Stitch iframe」 | 浏览器没登录 Google 或没访问过 Stitch | 在 Chrome 里登录 Google 账号，打开 stitch.withgoogle.com 一次 |
+| 「CDP 连接失败」 | Chrome 没以 CDP 模式启动 | 先运行 `python3 stitch.py --launch-chrome` |
+| 「生成按钮找不到」 | Stitch 界面改版了 | 提 Issue 或更新 stitch.py 里的按钮选择器 |
+| 「生成太快（几秒就完成）」 | 提示词没正确注入，Stitch 用了旧缓存 | 确保打开了新的空白 Stitch 页，不要复用已有页面 |
+| 「设计看起来是手机端」 | 平台选择器没选对 | 检查 Stitch 是否选中了「網頁」(Web) 而不是「應用程式」(App) |
 
 ## License
 

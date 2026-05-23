@@ -1,6 +1,6 @@
 ---
 name: stitchflow
-description: "AI UI 设计自动化工作流：通过 Chrome CDP + Playwright 连接已登录 Google Stitch 的浏览器。先读取项目上下文吃透业务，再撰写针对性设计 prompt，用 Stitch 3.1 Pro 出图。当用户要求设计 UI、Dashboard、Landing Page 或网页界面时使用。支持 macOS / Windows / Linux。"
+description: "AI UI 设计全自动化工作流：先读取项目上下文（CLAUDE.md、品牌数据、产品参数）吃透业务，再撰写针对性设计 prompt（不用千篇一律的模板），通过 Chrome CDP+Playwright 操控已登录 Google Stitch 的浏览器自动出图，截图确认后导出 HTML/CSS，AI 再转成实际前端代码。零 API Key — 用的是你浏览器里已登录的 Google 账号。当用户要求设计 UI、Dashboard、Landing Page 或网页界面时使用。支持 macOS / Windows / Linux。"
 compatibility: "需要: python3, playwright, 浏览器已登录 Google 并访问过 stitch.withgoogle.com"
 license: MIT
 metadata:
