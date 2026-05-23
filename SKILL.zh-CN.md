@@ -195,7 +195,7 @@ python3 ~/.claude/skills/stitchflow/stitch.py \
 - **首页提交方式**：输入 prompt 后按 Enter 键，自动创建项目并开始生成
 - 项目页无平台选择器 — 平台在创建项目时锁定，事后无法更改
 - 生成中检测：`document.body.innerText` 包含「正在为您设计」「正在开始构建」或「正在生成」
-- 生成完成检测：出现第 3 个 frame（预览区）或出现「提示：」文本
+- 生成完成检测：出现第 3 个 frame（预览区）AND body 中无生成状态文本
 
 ---
 

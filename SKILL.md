@@ -205,7 +205,7 @@ Project Context → Tailored Prompt → Stitch Generation → Screenshot → Use
 - **Home page submission**: Type prompt then press Enter — creates project and auto-starts generation
 - Project pages have NO platform selector — platform is locked at project creation time
 - Generation detection: `document.body.innerText` contains "正在为您设计", "正在开始构建", or "正在生成"
-- Completion detection: 3rd frame appears (preview) or "提示：" text appears
+- Completion detection: 3rd frame appears (preview) AND no generating status text in body
 
 ---
 
