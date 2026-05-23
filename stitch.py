@@ -136,20 +136,35 @@ def chrome_launch_cdp():
     return True
 
 
-def stitch_export(stitch, frame, output_dir):
+def stitch_export(stitch, frame, output_dir, preview_frame=None):
     """从 Stitch 页面导出设计 HTML/CSS — 多策略尝试"""
     print('\n→ 导出设计文件...')
 
-    # 策略1: 查找「Download / 下载」按钮
+    # 策略0: 优先从预览 frame 提取 HTML（最可靠的方式）
+    if preview_frame:
+        try:
+            html_content = preview_frame.evaluate('''() => document.documentElement.outerHTML''')
+            if html_content and len(html_content) > 200:
+                os.makedirs(output_dir, exist_ok=True)
+                html_path = os.path.join(output_dir, 'index.html')
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(f'<!DOCTYPE html>\n{html_content}')
+                print(f'  ✓ 从预览区提取 HTML: {html_path}')
+                return output_dir
+        except Exception as e:
+            print(f'  ⚠ 预览 frame 提取失败: {e}')
+
+    # 策略1: 查找导出按钮（中/英/繁 三语）
     export_selectors = [
-        'button:has-text("Download")',
-        'button:has-text("下载")',
-        'button:has-text("Export")',
+        'button:has-text("匯出")',
         'button:has-text("导出")',
+        'button:has-text("Download")',
+        'button:has-text("Export")',
+        'button:has-text("下载")',
+        '[aria-label="匯出"]',
+        '[aria-label="导出"]',
         '[aria-label="Download"]',
-        '[aria-label="下载"]',
         '[aria-label="Export"]',
-        '[title="Download"]',
     ]
     for sel in export_selectors:
         try:
@@ -472,7 +487,8 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
 
         # 阶段7: 导出设计文件
         if export_dir:
-            stitch_export(stitch, stitch.frames[1] if len(stitch.frames) >= 2 else stitch, export_dir)
+            preview = stitch.frames[2] if len(stitch.frames) >= 3 else None
+            stitch_export(stitch, stitch.frames[1] if len(stitch.frames) >= 2 else stitch, export_dir, preview_frame=preview)
 
         return output_path
 

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">Stitchflow</h1>
-<p align="center"><strong>Let your AI coding agent design UIs — auto-reads your project, crafts tailored prompts, drives Google Stitch</strong></p>
+<p align="center"><strong>AI UI design that actually understands your project — not generic AI slop</strong></p>
 
 <p align="center">
   <a href="README.zh-CN.md">🇨🇳 简体中文</a>
@@ -21,30 +21,33 @@
 
 ## Demo
 
-<video src="demo.mp4" controls width="100%"></video>
+<p align="center">
+  <a href="demo.mp4?raw=true">
+    <img src="preview.gif" alt="Stitchflow Demo" width="800">
+  </a>
+</p>
+<p align="center"><em>Click the GIF to watch the full video →</em></p>
 
-> Full automation: read project → write prompt → select platform → switch model → generate design → screenshot
+---
 
-## What is this?
+## The Problem
 
-When you ask an AI to design a dashboard or landing page, it can only describe it with text or sketch rough code. To see a real, polished design, you'd normally open Figma or manually type prompts into Google Stitch.
+Ask any AI coding agent to "design a dashboard," and you'll get something. But it'll look like every other AI-generated UI — generic layouts, the same color schemes, the same "AI aesthetic." It doesn't know your brand. It doesn't understand your business. It hasn't read your product specs.
 
-Stitchflow automates that entire loop: **your AI agent reads your project's actual context (brand colors, product data, user personas), crafts a prompt tailored to your business, drives Google Stitch through your already-logged-in Chrome browser, and delivers a full-page design screenshot.** Approve it, and the AI exports the HTML/CSS and converts it into real frontend code.
+The result: code that looks fine at first glance, but feels hollow and unoriginal the moment you use it.
 
-No manual Stitch interaction. No prompt engineering guesswork. No copy-paste.
+## What Stitchflow Does Differently
 
-## How is this different from Google's stitch-skills?
+Stitchflow doesn't just pass your one-liner to an LLM and dump out code. It runs a **six-stage pipeline** that starts with understanding your project and ends with production-ready frontend code:
 
-Google's [stitch-skills](https://github.com/google-labs-code/stitch-skills) is an MCP server that gives you API-style access to Stitch. But it doesn't close the loop — it can't read your project context and generate business-specific designs.
+1. **Reads your project** — CLAUDE.md, brand data, product specs, existing UI — so it knows what you're building
+2. **Crafts a tailored prompt** — not a template fill-in-the-blank, but a prompt written specifically for your business domain, brand colors, user personas, and functional needs
+3. **Drives Google Stitch via CDP** — connects to your already-logged-in Chrome browser, selects the "Web" platform, auto-picks the strongest available model, types in the prompt, and kicks off generation
+4. **Captures the result** — full-page screenshot for your review
+5. **Exports HTML/CSS** — extracts the rendered design from Stitch
+6. **Converts to real code** — your AI agent maps the design to your actual stack (React, Vue, plain HTML) with your project's conventions
 
-Stitchflow takes a different approach: it's not an MCP server. It drives Chrome directly through CDP (Chrome DevTools Protocol), using your already-logged-in browser session. This means:
-
-- **Zero API keys** — uses your existing Google account session
-- **Zero configuration** — no tokens, no secrets, no setup wizards
-- **Context-aware** — the AI reads your CLAUDE.md, product data, and brand assets before writing any prompt
-- **End-to-end pipeline** — understand → prompt → generate → screenshot → export → code
-
-Think of it this way: stitch-skills gives you the toolbox. Stitchflow gives you the fully automated assembly line.
+The output isn't "an AI dashboard." It's *your* dashboard, for *your* brand, with *your* data.
 
 ## Installation
 
@@ -52,7 +55,7 @@ Think of it this way: stitch-skills gives you the toolbox. Stitchflow gives you 
 # 1. Install dependencies
 pip install playwright && playwright install chromium
 
-# 2. Log into your Google account in Chrome, then visit https://stitch.withgoogle.com/ once
+# 2. Log into your Google account in Chrome, then visit https://stitch.withgoogle.com/ once to authorize
 
 # 3. Install to your AI coding agent
 # Claude Code:
@@ -72,19 +75,13 @@ cp -r stitchflow .agents/skills/       # Gemini CLI
 
 ## Usage
 
-### Recommended: Talk to your AI agent
+### With your AI agent (recommended)
 
 After installation, just say:
 
-> "Design a SaaS analytics dashboard with dark theme"
+> "Design an e-commerce operations dashboard with dark theme"
 
-The AI agent will:
-1. Read your project's CLAUDE.md, product data, and brand colors
-2. Craft a Stitch prompt tailored to your business
-3. Launch Chrome in CDP mode
-4. Open Stitch → select "Web" platform → auto-switch to the best model → type prompt → press Enter
-5. Wait for generation, then show you the screenshot
-6. Export HTML/CSS and convert to frontend code once you approve
+Your AI agent handles the entire pipeline — from reading your project context to delivering the final screenshot. Approve it, and it exports the code.
 
 ### CLI mode
 
@@ -137,11 +134,13 @@ One SKILL.md, compatible across all major AI coding agents (follows [agentskills
 
 ## Model Selection
 
-Stitch defaults to a standard model. **The script always switches to the most capable model available** (the model list evolves as Google releases new ones). The rule: pick the one with the **highest version number** and/or **Pro/Ultra/Max** label.
+Stitch defaults to a standard model. The script **automatically switches to the most capable model available** (model list evolves as Google releases new ones). It opens the model dropdown, scores options by version number + Pro/Thinking labels, and selects the best one.
 
-Stronger model → deeper design reasoning → more nuanced, creative output. Trade-off: ~60-120s generation time vs 30-60s for standard models.
+Stronger model → deeper design reasoning → more nuanced, creative output. Trade-off: ~60-120s vs 30-60s generation time.
 
-> Model switching is fully automated: the script opens the model dropdown, scores options by version number + Pro/Thinking labels, and auto-clicks the best one.
+## Zero API Keys
+
+No API keys. No tokens. No configuration. Stitchflow connects to Google Stitch through your existing Chrome login session via CDP — the same way you'd use Stitch manually in the browser.
 
 ## File Structure
 
@@ -151,7 +150,8 @@ stitchflow/
 ├── SKILL.zh-CN.md    # Chinese skill definition
 ├── stitch.py         # Core script: CDP launcher + Stitch automation + export
 ├── icon.png          # Skill icon (1024×1024)
-├── demo.mp4          # Demo video
+├── demo.mp4          # Full demo video
+├── preview.gif       # Animated preview for README
 ├── README.md         # This file (English)
 ├── README.zh-CN.md   # Chinese README
 └── LICENSE           # MIT
@@ -163,9 +163,9 @@ stitchflow/
 |---------|-------|----------|
 | "Stitch iframe not detected" | Browser not logged into Google or hasn't visited Stitch | Log into Google in Chrome, then open stitch.withgoogle.com once |
 | "CDP connection failed" | Chrome not running in CDP mode | Run `python3 stitch.py --launch-chrome` first |
-| "Generate button not found" | Stitch UI changed | **Fixed**: new flow doesn't need a generate button — type prompt on home page, press Enter, Stitch auto-creates project and starts generation |
-| "Generation finished too fast (a few seconds)" | Prompt didn't inject properly, or false-positive completion detection | **Fixed**: keyboard-based input + improved generation detection. Check CDP connection if issues persist |
-| "Design looks like a mobile app" | Platform selector defaulted to "App" mode | **Fixed**: script now auto-clicks the "Web" radio button and verifies `aria-checked="true"` |
+| "Generate button not found" | Stitch UI changed | **Fixed**: home page flow — type prompt, press Enter, auto-creates project |
+| "Generation finished too fast" | Prompt didn't inject properly, or false-positive detection | **Fixed**: keyboard input + improved completion detection |
+| "Design looks like a mobile app" | Platform selector defaulted to "App" | **Fixed**: script auto-clicks "Web" radio button, verifies with `aria-checked` |
 
 ## License
 
