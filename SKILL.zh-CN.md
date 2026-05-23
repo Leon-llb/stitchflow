@@ -1,0 +1,184 @@
+---
+name: stitchflow
+description: "AI UI 设计自动化工作流：通过 Chrome CDP + Playwright 连接已登录 Google Stitch 的浏览器。先读取项目上下文吃透业务，再撰写针对性设计 prompt，用 Stitch 3.1 Pro 出图。当用户要求设计 UI、Dashboard、Landing Page 或网页界面时使用。支持 macOS / Windows / Linux。"
+compatibility: "需要: python3, playwright, 浏览器已登录 Google 并访问过 stitch.withgoogle.com"
+license: MIT
+metadata:
+  author: Leon
+  version: "1.0.0"
+---
+
+# Stitchflow — AI UI 设计自动化工作流
+
+通过 CDP 连接用户已登录 Google Stitch 的 Chrome 浏览器，自动化完成从「项目理解 → prompt 撰写 → Stitch 生成 → 截图输出」的完整 UI 设计链路。
+
+> **核心原则：先吃透项目，再写 prompt。不用千篇一律的通用提示词。**
+
+---
+
+## 前置条件（用户须知）
+
+| 条件 | 说明 |
+|------|------|
+| Google 账号 | 用户的 Chrome 浏览器已登录 Google 账号 |
+| Stitch 已访问 | 用该 Google 账号访问过 [stitch.withgoogle.com](https://stitch.withgoogle.com/) |
+| Playwright | `pip install playwright && playwright install chromium` |
+| Python 3.8+ | 系统已安装 |
+
+> ⚠ **如果用户的浏览器没有登录 Google 或没有访问过 Stitch，脚本会失败。**
+> 此时告诉用户：请在你的 Chrome 浏览器中登录 Google 账号，然后打开 stitch.withgoogle.com 授权一次。
+
+---
+
+## 完整工作流（AI 执行步骤）
+
+### 阶段一：吃透项目
+
+在执行 Stitch 设计之前，**必须先读取项目上下文**，理解这个项目是做什么的：
+
+```
+必读文件（按优先级）:
+1. CLAUDE.md                    → 品牌定位、项目架构、行为规则
+2. bridge/knowledge-base/       → 产品参数、SKU 数据
+3. platforms/                   → 平台配置（抖音/京东）
+4. assets/                      → 品牌素材（如有）
+5. dashboard/index.html         → 当前 UI 状态（如果是改版）
+```
+
+从项目文件提取以下信息，填入 prompt 模板：
+- **品牌名 / 项目代号**
+- **行业 / 品类**（电商？SaaS？存储硬件？）
+- **品牌色 / 设计 token**（如有 hex 值）
+- **目标用户画像**
+- **核心功能需求**（KPI 看板？内容管理？数据图表？）
+- **当前 UI 痛点**（如果是改版）
+
+### 阶段二：撰写针对性 Prompt
+
+根据项目实际情况撰写 prompt。**禁止用通用模板直接填充** — 每个项目的 prompt 应该因为领域不同而有显著差异。
+
+Prompt 结构（必须包含以下维度）：
+
+```
+项目身份：[品牌名 / 代号]，[行业/品类]，[一句话定位]
+设计目标：[新增 / 改版 / 探索]，具体要设计什么页面
+品牌调性：[3-5个形容词描述风格]，关键视觉元素
+配色方案：主色 #XXXXXX，辅色 #XXXXXX，[深色/浅色/混合]
+目标用户：[谁在用]，[使用场景]
+页面结构：
+  - Screen 1: [名称] — [功能描述]
+  - Screen 2: [名称] — [功能描述]
+  - ...
+功能需求：[具体的数据指标、图表类型、交互方式]
+语言：所有界面文字使用中文
+参考风格：[如有，1-2个设计方向]
+```
+
+**示例 — 猫船长电商运营看板：**
+
+```
+项目身份：猫船长 CatCaptain（凌云 Lingyun），存储硬件电商，国产高性价比 Micro SD / SSD 品牌
+设计目标：重新设计运营数据看板 Dashboard，替代现有纯信息架构页面
+品牌调性：专业、科技感、数据驱动，蓝色科技 + 橙色活力点缀
+配色方案：深色主题，主色 #1a1f36（深蓝黑），强调色 #FF6B35（猫船长橙），数据绿 #00C897
+目标用户：AI 运营官（每天盯盘），品牌创始人（每周看报表）
+页面结构：
+  - Screen 1 — 主看板：KPI 总览卡片（GMV/订单数/ROI/CTR）+ 趋势折线图 + 平台分布
+  - Screen 2 — 内容工厂：短视频素材列表 + 标题 A/B 测试状态 + 内容排期日历
+  - Screen 3 — 竞品监控：价格对比表格 + 竞品动态时间线
+  - Screen 4 — 日报/周报：自动生成报告预览 + 关键指标变化标注
+功能需求：实时数据卡片 + Chart.js 图表 + 可筛选表格 + 左侧导航 + 深色模式
+语言：所有界面文字使用中文
+参考风格：Vercel Analytics 的简洁数据卡片 + Linear 的深色侧边栏
+```
+
+### 阶段三：启动 Chrome CDP
+
+调用 `stitch.py --launch-chrome` 启动 CDP 模式浏览器。
+
+**macOS:**
+```bash
+killall "Google Chrome" 2>/dev/null; sleep 2
+cp -r "$HOME/Library/Application Support/Google/Chrome" "/tmp/chrome-profile-clone"
+nohup /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir="/tmp/chrome-profile-clone" \
+  > /tmp/chrome-cdp.log 2>&1 &
+```
+
+**Windows:**
+```bash
+taskkill /F /IM chrome.exe /T
+xcopy "%LOCALAPPDATA%\Google\Chrome\User Data" "%TEMP%\chrome-profile-clone" /E /I /H /Y
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+  --remote-debugging-port=9222 ^
+  --user-data-dir="%TEMP%\chrome-profile-clone" ^
+  --disable-features=DevToolsDebuggingRestrictions
+```
+
+> Windows 注意：Chrome 136+ 对默认 profile 路径有安全限制，需要 `--disable-features=DevToolsDebuggingRestrictions`。Mac 使用 `/tmp` 克隆路径天然绕过此限制。
+
+### 阶段四：执行 Stitch 设计
+
+```bash
+python3 ~/.claude/skills/stitchflow/stitch.py "<阶段二撰写的完整prompt>" --output <项目目录>/stitch-design-v1.png
+```
+
+脚本自动完成：
+1. 通过 CDP 连接 Chrome
+2. 打开/复用 Stitch 页面
+3. 进入 iframe（`app-companion-430619.appspot.com`）
+4. 选择「網頁」平台
+5. 填入 prompt 到 contenteditable 编辑器
+6. 点击生成按钮
+7. 轮询等待生成完成
+8. 全页截图保存
+
+### 阶段五：模型选择
+
+Stitch 默认使用标准模型。**建议在 prompt 中或浏览器中切换为 3.1 Pro 模型**以获得更深度的设计思考：
+
+- 在 Stitch 界面左上角模型选择器中切换为 **Gemini 3.1 Pro**
+- 3.1 Pro 的深度推理能力会产生更细致、更有创意的设计
+- 代价是生成时间稍长（约 60-120s vs 30-60s）
+
+脚本暂不支持自动化切换模型（需手动在浏览器中点选）。
+
+### 阶段六：展示 + 迭代
+
+用 `Read` 工具读取截图展示给用户。用户确认方向后：
+- 满意 → 进入代码实现阶段
+- 不满意 → 根据用户反馈修改 prompt，重新生成
+
+---
+
+## IFrame / Stitch 界面参考
+
+- 主内容在 `frames[1]`（iframe 来源 `app-companion-430619.appspot.com`）
+- 编辑器是 TipTap/ProseMirror 富文本编辑器，元素为 `[contenteditable="true"]`
+- 生成按钮：`button[placeholder="生成設計"]` / `button:has-text("生成")`
+- 生成中检测：`document.body.innerText` 包含「正在生成」
+- 平台选择：`button:has-text("網頁")` （Web）/ `button:has-text("應用程式")` （App）
+
+---
+
+## 一键命令
+
+```bash
+# 完整流程（启动 CDP + 设计 + 截图）
+python3 ~/.claude/skills/stitchflow/stitch.py \
+  "你的完整设计prompt" \
+  --launch-chrome \
+  --output ./stitch-design-v1.png
+
+# 如果 CDP 已启动，直接生成
+python3 ~/.claude/skills/stitchflow/stitch.py \
+  "你的完整设计prompt" \
+  --output ./stitch-design-v2.png
+```
+
+---
+
+## 关键词
+
+`stitch` `google stitch` `AI 设计` `UI 设计` `dashboard` `设计自动化` `CDP` `Playwright`
