@@ -17,6 +17,7 @@ import sys
 import time
 import subprocess
 import os
+import re
 import json
 import shutil
 import platform
@@ -223,7 +224,7 @@ def stitch_export(stitch, frame, output_dir):
 
 
 def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
-    """连接 CDP → 操作 Stitch → 输入 prompt → 等待生成 → 截图 → 导出"""
+    """CDP 连接 → 首页选 Web 平台 → 选最强模型 → 输入 prompt → 按 Enter 创建项目 → 等待自动生成 → 截图"""
     from playwright.sync_api import sync_playwright
 
     print(f'\n{"="*60}')
@@ -241,22 +242,13 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
 
         context = browser.contexts[0]
 
-        # 查找或打开 Stitch 页面
-        stitch = None
-        for page in context.pages:
-            if 'stitch.withgoogle.com' in page.url:
-                stitch = page
-                print('→ 复用已有 Stitch 页面')
-                break
-
-        if not stitch:
-            print('→ 打开 Stitch...')
-            stitch = context.new_page()
-            stitch.goto(STITCH_URL, wait_until='domcontentloaded')
-            stitch.wait_for_timeout(4000)
+        # 始终从首页开始（确保平台选择可用）
+        print('→ 打开 Stitch 首页...')
+        stitch = context.new_page()
+        stitch.goto(STITCH_URL, wait_until='domcontentloaded')
+        stitch.wait_for_timeout(6000)
 
         # Stitch 界面在 iframe 中（来源: app-companion-430619.appspot.com）
-        print(f'→ 页面 frame 数量: {len(stitch.frames)}')
         if len(stitch.frames) < 2:
             print('→ 等待 iframe 加载...')
             stitch.wait_for_timeout(5000)
@@ -270,88 +262,217 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
 
         frame = stitch.frames[1]
 
-        # 选择平台「網頁」(Web) — 而不是「應用程式」(App)
+        # 阶段1: 选择「網頁」(Web) 平台 — 平台选择器是 role="radio" 按钮，仅在首页可见
+        print('→ 选择「網頁」(Web) 平台...')
         platform_selected = False
-        try:
-            # 先检测当前是否已经选中「網頁」
-            web_btn = frame.locator('button:has-text("網頁")')
-            app_btn = frame.locator('button:has-text("應用程式")')
+        for attempt in range(5):
+            web_btn = frame.locator('button[role="radio"]:has-text("網頁")')
             if web_btn.count() > 0:
+                checked = web_btn.first.get_attribute('aria-checked')
+                if checked == 'true':
+                    print('  ✓ 已是 Web 模式')
+                    platform_selected = True
+                    break
+                # 点击切换到 Web
                 web_btn.first.click()
                 stitch.wait_for_timeout(1500)
-                print('→ 已选择「網頁」(Web) 平台')
-                platform_selected = True
-            elif app_btn.count() > 0:
-                # 如果看到「應用程式」按钮说明还没选 Web，先尝试找 Web 按钮
-                web_alt = frame.locator('button:has-text("Web")')
-                if web_alt.count() > 0:
-                    web_alt.first.click()
-                    stitch.wait_for_timeout(1500)
-                    print('→ 已选择 Web 平台')
+                new_checked = web_btn.first.get_attribute('aria-checked')
+                if new_checked == 'true':
+                    print('  ✓ 已切换到 Web 模式')
                     platform_selected = True
+                    break
                 else:
-                    print('→ 当前显示为「應用程式」模式，但未找到 Web 切换按钮，可能已经是 Web 模式')
-        except Exception as e:
-            print(f'→ 平台选择跳过: {e}')
+                    print(f'  ⚠ 点击后 aria-checked={new_checked}，重试...')
+            else:
+                # 可能在项目页（无平台选择器），需要回到首页
+                current_url = stitch.url
+                if '/projects/' in current_url:
+                    print('  → 当前在项目页，导航回首页...')
+                    stitch.goto(STITCH_URL, wait_until='domcontentloaded')
+                    stitch.wait_for_timeout(6000)
+                    frame = stitch.frames[1] if len(stitch.frames) >= 2 else frame
+            stitch.wait_for_timeout(1000)
 
         if not platform_selected:
-            print('→ 注意：请确认 Stitch 中已选择「網頁」平台（不是「應用程式」），否则会生成手机端设计')
+            print('  ⚠ 未能切换平台，将在当前模式下继续。请手动确认 Stitch 中已选择「網頁」！')
 
-        # 输入 prompt
+        # 阶段2: 选择最强模型 — 使用一步到位的 JS 调用（菜单在离开 JS 上下文时会自动关闭）
+        print('→ 选择最强模型...')
+        model_result = frame.evaluate('''async () => {
+            // 找到模型按钮
+            const btns = document.querySelectorAll('button[aria-haspopup="menu"]');
+            let modelBtn = null;
+            for (const b of btns) {
+                const t = b.textContent?.trim() || '';
+                if (t.includes('Flash') || t.includes('Pro') || t.includes('Gemini')) {
+                    modelBtn = b;
+                    break;
+                }
+            }
+            if (!modelBtn) return {status: 'NO BTN'};
+
+            const currentModel = modelBtn.textContent?.trim();
+
+            // 如果已经是 Thinking 模型，无需切换
+            if (currentModel.includes('Thinking')) {
+                return {status: 'ALREADY BEST', currentModel};
+            }
+
+            // 点击打开菜单
+            modelBtn.click();
+
+            // 等待 menuitem 渲染（菜单动画有延迟）
+            let items = [];
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 300));
+                items = document.querySelectorAll('[role="menuitem"]');
+                if (items.length > 0) break;
+            }
+
+            if (items.length === 0) {
+                modelBtn.click();  // 关闭菜单
+                return {status: 'NO ITEMS', currentModel};
+            }
+
+            // 打分选最强：Thinking > Pro > 高版本号
+            let best = null;
+            let bestScore = -1;
+            const options = [];
+            for (const item of items) {
+                const text = item.textContent?.trim() || '';
+                let score = 0;
+                if (text.includes('Thinking')) score += 100;
+                if (text.includes('Pro')) score += 50;
+                const verMatch = text.match(/(\\d+\\.?\\d*)\\s*(Pro|Flash|Ultra|Max)?/);
+                if (verMatch) {
+                    score += parseFloat(verMatch[1]) || 0;
+                }
+                options.push({text: text.substring(0, 80), score});
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = item;
+                }
+            }
+
+            // 只要最强模型和当前不同就切换（对比完整文本前20个字符）
+            const bestText = best?.textContent?.trim()?.substring(0, 20) || '';
+            const curShort = currentModel?.trim()?.substring(0, 20) || '';
+            const isDifferent = !bestText.includes(curShort) && bestScore > 0;
+            if (best && isDifferent) {
+                best.click();
+                await new Promise(r => setTimeout(r, 1000));
+                const newModel = modelBtn.textContent?.trim();
+                return {status: 'OK', currentModel, newModel, options};
+            }
+
+            // 关闭菜单
+            modelBtn.click();
+            return {status: 'ALREADY BEST', currentModel, options};
+        }''')
+
+        if model_result.get('status') == 'OK':
+            print(f'  当前: {model_result.get("currentModel")}')
+            print(f'  → 已切换至: {model_result.get("newModel")}')
+        elif model_result.get('status') == 'ALREADY BEST':
+            print(f'  当前已是最强模型: {model_result.get("currentModel")}')
+        else:
+            print(f'  ⚠ 模型切换未完成: {model_result}')
+            print('  请在 Stitch 左上角模型选择器中手动切换到最强模型')
+
+        # 阶段3: 输入 prompt（用键盘输入触发编辑器验证）
         print('→ 输入设计 prompt...')
-        textbox = frame.locator('[contenteditable="true"]').first
-        textbox.click()
-        textbox.fill('')
-        textbox.type(prompt, delay=5)
-        stitch.wait_for_timeout(1000)
+        editor = frame.locator('[contenteditable="true"]').first
+        try:
+            editor.click(force=True)  # force=True 绕过可能的弹窗遮挡
+            stitch.wait_for_timeout(500)
+            # 清空已有内容
+            editor.press('Control+a')
+            editor.press('Backspace')
+            stitch.wait_for_timeout(300)
+            # 逐字输入（触发 TipTap 编辑器的 input 事件）
+            editor.type(prompt, delay=3)
+            stitch.wait_for_timeout(1000)
+            typed = editor.text_content() or ''
+            print(f'  已输入 {len(typed)} 字符')
+        except Exception as e:
+            print(f'  ⚠ 键盘输入失败: {e}')
+            # 回退: JS 注入（注意：JS 注入可能无法触发编辑器的表单验证）
+            safe_prompt = prompt.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '</p><p>')
+            frame.evaluate(f"""
+                const ed = document.querySelector('[contenteditable="true"]');
+                if (ed) {{
+                    ed.focus();
+                    ed.innerHTML = '<p>{safe_prompt}</p>';
+                    ed.dispatchEvent(new InputEvent('input', {{ bubbles: true }}));
+                }}
+            """)
+            stitch.wait_for_timeout(1000)
 
-        # 点击生成
-        print('→ 点击生成...')
-        gen_btn = None
-        for selector in [
-            'button[placeholder="生成設計"]',
-            'button:has-text("生成")',
-            'button:has-text("Generate")',
-        ]:
-            loc = frame.locator(selector)
-            if loc.count() > 0:
-                gen_btn = loc.first
-                break
+        # 阶段4: 按 Enter 创建新项目（Stitch 会自动开始生成）
+        print('→ 按 Enter 创建项目（Stitch 将自动开始生成）...')
+        editor.press('Enter')
+        stitch.wait_for_timeout(8000)
 
-        if not gen_btn:
-            print('✗ 未找到生成按钮，可能 Stitch UI 已变更')
-            stitch.screenshot(path=output_path, full_page=True)
-            return None
+        # 检查是否导航到了项目页
+        if '/projects/' not in stitch.url:
+            print('  ⚠ 未导航到项目页，重试 Enter...')
+            editor.press('Enter')
+            stitch.wait_for_timeout(8000)
 
-        gen_btn.click()
+        if '/projects/' in stitch.url:
+            print(f'  ✓ 项目已创建: {stitch.url}')
+        else:
+            print(f'  ⚠ 仍在首页，将尝试手动点击生成按钮')
 
-        # 等待生成完成（最长 150s）
-        print('→ 等待生成完成...')
+        # 阶段5: 等待自动生成完成
+        print('→ 等待生成完成（最长 5 分钟）...')
+        frame = stitch.frames[1] if len(stitch.frames) >= 2 else stitch
+
+        generation_status_texts = [
+            '正在生成', 'Generating',
+            '正在为您设计', 'Designing',
+            '正在开始构建', 'Starting to build',
+            'Mapping out', 'Predicting',
+            'Design system established',
+            'Crafting the detailed', 'Crafting the',
+            'Creating',
+        ]
+
         done = False
-        for i in range(30):
+        for i in range(60):  # 最多等 5 分钟
             time.sleep(5)
             try:
-                body_text = frame.evaluate('() => document.body.innerText')
-                if '正在生成' not in body_text and 'Generating' not in body_text:
+                body_text = frame.evaluate('() => document.body?.innerText || ""')
+                still_generating = any(t in body_text for t in generation_status_texts)
+                n_frames = len(stitch.frames)
+
+                if still_generating:
+                    pass  # 仍在生成，继续等待
+                elif n_frames >= 3:
+                    # 有预览 frame 且没有生成状态文本 → 生成完成
                     elapsed = (i + 1) * 5
-                    print(f'  ✓ 生成完成！(等待 {elapsed}s)')
+                    print(f'  ✓ 生成完成！(等待 {elapsed}s, frames={n_frames})')
                     done = True
                     break
+                # 注意: 不要用「提示：」来判断完成 — 它可能在生成中就会出现
             except Exception:
                 pass
-            print(f'  ... {(i+1)*5}s')
+
+            if (i + 1) % 6 == 0:  # 每 30s 输出一次
+                nf = len(stitch.frames)
+                print(f'  ... {(i+1)*5}s (frames={nf})')
 
         if not done:
             print('  ⚠ 等待超时，可能是生成时间较长或出错')
             print('  继续截图当前页面...')
 
-        # 截图
+        # 阶段6: 截图
         stitch.screenshot(path=output_path, full_page=True)
         print(f'\n✓ 截图已保存: {output_path}')
 
-        # 导出设计文件
+        # 阶段7: 导出设计文件
         if export_dir:
-            stitch_export(stitch, frame, export_dir)
+            stitch_export(stitch, stitch.frames[1] if len(stitch.frames) >= 2 else stitch, export_dir)
 
         return output_path
 

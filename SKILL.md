@@ -136,12 +136,12 @@ python3 ~/.claude/skills/stitchflow/stitch.py "<prompt from Phase 2>" --output <
 
 The script automatically:
 1. Connects to Chrome via CDP
-2. Opens/reuses the Stitch page
+2. Opens the Stitch home page (`stitch.withgoogle.com`)
 3. Enters the Stitch iframe (`app-companion-430619.appspot.com`)
-4. Selects the "Web" platform
-5. Types the prompt into the contenteditable editor
-6. Clicks the generate button
-7. Polls until generation completes
+4. **Selects the "Web" platform on the home page** (platform selector only visible on home page, NOT on project pages)
+5. Types the prompt into the contenteditable editor using keyboard input
+6. Presses Enter to create a new project (Stitch auto-starts generation — no need to click a generate button)
+7. Polls until generation completes (checks for preview frame or completion cues)
 8. Saves a full-page screenshot
 
 ### Phase 5: Model Selection
@@ -150,11 +150,9 @@ Stitch defaults to a standard model. **Always switch to the most capable model a
 
 The rule: **pick the model with the highest version number or the one labeled "Pro" / "Ultra" / "Max"** — whichever is the most powerful in the dropdown list.
 
-- Click the model selector in the top-left corner of Stitch
-- Select the top-tier model (more parameters → deeper design reasoning → more nuanced, creative output)
+- Script now automates model selection: opens the model dropdown, scores available models, and picks the one with the highest version number + "Pro"/"Thinking" label
+- Selects the top-tier model (more parameters → deeper design reasoning → more nuanced, creative output)
 - Trade-off: longer generation time (~60-120s vs 30-60s for standard models)
-
-> Manual step — the script can't automate the model dropdown yet (requires UI interaction within the iframe).
 
 ### Phase 6: Review, Export + Handoff
 
@@ -203,9 +201,11 @@ Project Context → Tailored Prompt → Stitch Generation → Screenshot → Use
 
 - Main content is in `frames[1]` (iframe origin: `app-companion-430619.appspot.com`)
 - Editor: TipTap/ProseMirror rich text editor, element `[contenteditable="true"]`
-- Generate button: `button[placeholder="生成設計"]` / `button:has-text("生成")` / `button:has-text("Generate")`
-- Generation detection: `document.body.innerText` contains "正在生成" or "Generating"
-- Platform selector: `button:has-text("網頁")` (Web) / `button:has-text("應用程式")` (App)
+- **Platform selector only on home page**: `button[role="radio"]:has-text("網頁")` (Web) / `button[role="radio"]:has-text("應用程式")` (App), selected state via `aria-checked="true"`
+- **Home page submission**: Type prompt then press Enter — creates project and auto-starts generation
+- Project pages have NO platform selector — platform is locked at project creation time
+- Generation detection: `document.body.innerText` contains "正在为您设计", "正在开始构建", or "正在生成"
+- Completion detection: 3rd frame appears (preview) or "提示：" text appears
 
 ---
 
