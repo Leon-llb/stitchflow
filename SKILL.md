@@ -155,11 +155,46 @@ Stitch defaults to a standard model. **Switch to Gemini 3.1 Pro** in the Stitch 
 
 > Manual step — the script can't automate the model dropdown yet (requires UI interaction within the iframe).
 
-### Phase 6: Review + Iterate
+### Phase 6: Review, Export + Handoff
 
 Use the `Read` tool to show the screenshot to the user. Once direction is confirmed:
-- Approved → Move to code implementation
-- Needs revision → Refine prompt based on feedback, regenerate
+
+**Approved → Export design to code:**
+
+```bash
+python3 ~/.claude/skills/stitchflow/stitch.py \
+  "<same prompt>" \
+  --export .stitch/designs/
+```
+
+The `--export` flag triggers `stitch_export()` which uses 4 fallback strategies:
+1. Click Stitch's "Download" / "Export" button in the UI
+2. Try the "..." more menu → find export options
+3. Extract rendered HTML directly from the Stitch preview iframe
+4. Capture browser download events for any triggered file downloads
+
+Files are saved to `.stitch/designs/` (Google stitch-skills compatible directory):
+
+```
+.stitch/designs/
+├── home-dashboard.html     # Exported HTML
+├── home-dashboard.png      # Design screenshot
+└── index.html              # Full page HTML (fallback extraction)
+```
+
+**AI then converts to project code:**
+- Read the exported HTML/CSS files from `.stitch/designs/`
+- Map the design to the project's actual framework (React/Vue/static HTML)
+- Match design tokens to the project's CSS variables / Tailwind config
+- Write clean, production-ready components
+- Respect the project's existing file structure and conventions
+
+**Needs revision → Refine prompt based on feedback, regenerate.**
+
+The complete pipeline:
+```
+Project Context → Tailored Prompt → Stitch Generation → Screenshot → User Approval → Export HTML → AI Converts to Code
+```
 
 ---
 
@@ -176,16 +211,18 @@ Use the `Read` tool to show the screenshot to the user. Once direction is confir
 ## One-Liner Commands
 
 ```bash
-# Full pipeline (launch CDP + design + screenshot)
+# Full pipeline (launch CDP + design + screenshot + export)
 python3 ~/.claude/skills/stitchflow/stitch.py \
   "your full design prompt" \
   --launch-chrome \
-  --output ./stitch-design-v1.png
+  --output ./stitch-design-v1.png \
+  --export .stitch/designs/
 
-# If CDP is already running, just generate
+# If CDP is already running, just generate + export
 python3 ~/.claude/skills/stitchflow/stitch.py \
   "your full design prompt" \
-  --output ./stitch-design-v2.png
+  --output ./stitch-design-v2.png \
+  --export .stitch/designs/
 ```
 
 ---

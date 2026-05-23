@@ -135,8 +135,95 @@ def chrome_launch_cdp():
     return True
 
 
-def stitch_generate(prompt, output_path='stitch-result.png'):
-    """连接 CDP → 操作 Stitch → 输入 prompt → 等待生成 → 截图"""
+def stitch_export(stitch, frame, output_dir):
+    """从 Stitch 页面导出设计 HTML/CSS — 多策略尝试"""
+    print('\n→ 导出设计文件...')
+
+    # 策略1: 查找「Download / 下载」按钮
+    export_selectors = [
+        'button:has-text("Download")',
+        'button:has-text("下载")',
+        'button:has-text("Export")',
+        'button:has-text("导出")',
+        '[aria-label="Download"]',
+        '[aria-label="下载"]',
+        '[aria-label="Export"]',
+        '[title="Download"]',
+    ]
+    for sel in export_selectors:
+        try:
+            btn = frame.locator(sel)
+            if btn.count() > 0:
+                btn.first.click()
+                stitch.wait_for_timeout(3000)
+                print(f'  点击了: {sel}')
+                break
+        except Exception:
+            continue
+
+    # 策略2: 查找「...」更多菜单中的导出选项
+    more_selectors = [
+        'button[aria-label="More"]',
+        'button:has-text("...")',
+        '[aria-label="更多操作"]',
+    ]
+    for sel in more_selectors:
+        try:
+            btn = frame.locator(sel)
+            if btn.count() > 0:
+                btn.first.click()
+                stitch.wait_for_timeout(1000)
+                # 再找下载选项
+                for exp_sel in export_selectors:
+                    exp_btn = frame.locator(exp_sel)
+                    if exp_btn.count() > 0:
+                        exp_btn.first.click()
+                        stitch.wait_for_timeout(3000)
+                        print(f'  通过菜单点击了: {exp_sel}')
+                        break
+                break
+        except Exception:
+            continue
+
+    # 策略3: 从 iframe 中直接提取 HTML（最后的保底方案）
+    try:
+        html_content = frame.evaluate('''() => {
+            // 尝试找预览区的 HTML
+            const preview = document.querySelector('.preview, .output, [class*="preview"], [class*="output"], iframe');
+            if (preview && preview.contentDocument) {
+                return preview.contentDocument.documentElement.outerHTML;
+            }
+            // 尝试从 body 中提取所有可见的渲染结果
+            const rendered = document.querySelector('[class*="rendered"], [class*="result"], [class*="generated"]');
+            if (rendered) return rendered.outerHTML;
+            return null;
+        }''')
+        if html_content:
+            os.makedirs(output_dir, exist_ok=True)
+            html_path = os.path.join(output_dir, 'index.html')
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(f'<!DOCTYPE html>\n{html_content}')
+            print(f'  ✓ 提取 HTML: {html_path}')
+    except Exception as e:
+        print(f'  ⚠ HTML 提取失败: {e}')
+
+    # 策略4: 监听下载事件，捕获浏览器下载的文件
+    try:
+        download_dir = os.path.abspath(output_dir)
+        os.makedirs(download_dir, exist_ok=True)
+        with stitch.expect_download(timeout=10000) as download_info:
+            pass  # 如果上面触发了下载，这里会捕获到
+        if download_info.value:
+            download_info.value.save_as(os.path.join(download_dir, download_info.value.suggested_filename))
+            print(f'  ✓ 下载文件: {download_info.value.suggested_filename}')
+    except Exception:
+        pass  # 没有触发下载
+
+    return output_dir
+
+
+def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
+    """连接 CDP → 操作 Stitch → 输入 prompt → 等待生成 → 截图 → 导出"""
     from playwright.sync_api import sync_playwright
 
     print(f'\n{"="*60}')
@@ -244,6 +331,11 @@ def stitch_generate(prompt, output_path='stitch-result.png'):
         # 截图
         stitch.screenshot(path=output_path, full_page=True)
         print(f'\n✓ 截图已保存: {output_path}')
+
+        # 导出设计文件
+        if export_dir:
+            stitch_export(stitch, frame, export_dir)
+
         return output_path
 
 
@@ -283,6 +375,8 @@ if __name__ == '__main__':
                         help='关闭现有 Chrome 并以 CDP 模式重启（首次使用必须）')
     parser.add_argument('--output', '-o', default='stitch-result.png',
                         help='输出截图路径 (默认: stitch-result.png)')
+    parser.add_argument('--export', '-e', nargs='?', const='.stitch/designs',
+                        help='导出设计 HTML/CSS 到指定目录 (默认: .stitch/designs)')
     parser.add_argument('--cdp-port', type=int, default=9222,
                         help='CDP 端口 (默认: 9222)')
     args = parser.parse_args()
@@ -313,8 +407,10 @@ if __name__ == '__main__':
         parser.print_help()
         sys.exit(0)
 
-    result = stitch_generate(args.prompt, args.output)
+    result = stitch_generate(args.prompt, args.output, export_dir=args.export)
     if result:
         print(f'\n完成！可以用以下命令查看:')
         print(f'  open {result}  # macOS')
         print(f'  start {result}  # Windows')
+        if args.export:
+            print(f'  设计文件已导出到: {args.export}')

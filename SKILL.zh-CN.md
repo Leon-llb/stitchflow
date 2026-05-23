@@ -144,11 +144,46 @@ Stitch 默认使用标准模型。**建议在 prompt 中或浏览器中切换为
 
 脚本暂不支持自动化切换模型（需手动在浏览器中点选）。
 
-### 阶段六：展示 + 迭代
+### 阶段六：确认 + 导出 + 交付
 
 用 `Read` 工具读取截图展示给用户。用户确认方向后：
-- 满意 → 进入代码实现阶段
-- 不满意 → 根据用户反馈修改 prompt，重新生成
+
+**满意 → 导出设计稿到代码：**
+
+```bash
+python3 ~/.claude/skills/stitchflow/stitch.py \
+  "<同款prompt>" \
+  --export .stitch/designs/
+```
+
+`--export` 参数触发 `stitch_export()`，用 4 层回退策略自动导出：
+1. 点击 Stitch 界面的「Download / 下载 / Export」按钮
+2. 尝试「...」更多菜单 → 找导出选项
+3. 直接从 Stitch 预览区提取渲染好的 HTML
+4. 捕获浏览器触发的文件下载事件
+
+文件保存到 `.stitch/designs/`（兼容 Google stitch-skills 目录结构）：
+
+```
+.stitch/designs/
+├── home-dashboard.html     # 导出的 HTML
+├── home-dashboard.png      # 设计截图
+└── index.html              # 完整页面 HTML（回退提取）
+```
+
+**AI 拿到导出文件后，转换为项目代码：**
+- 读取 `.stitch/designs/` 中的 HTML/CSS
+- 按项目实际框架映射（React / Vue / 静态 HTML）
+- 匹配项目的 CSS 变量 / Tailwind 配置
+- 遵守项目已有的文件结构和命名规范
+- 产出可运行的、生产级别的代码
+
+**不满意 → 根据用户反馈修改 prompt，重新生成。**
+
+完整链路由六阶段闭环：
+```
+项目上下文 → 针对性 Prompt → Stitch 生成 → 截图确认 → 导出 HTML → AI 写代码
+```
 
 ---
 
