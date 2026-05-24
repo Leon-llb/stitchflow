@@ -67,72 +67,104 @@ STITCH_URL = 'https://stitch.withgoogle.com/'
 # 核心功能
 # ============================================================
 
+def _find_free_cdp_port(start=9222):
+    """找一个未被占用的 CDP 端口"""
+    port = start
+    while port < start + 50:
+        try:
+            urlopen(f'http://localhost:{port}/json/version', timeout=1)
+            port += 1  # 被占用，试下一个
+        except Exception:
+            return port  # 可用
+    return start  # 全部被占用，返回默认
+
+
 def chrome_launch_cdp():
-    """关闭现有 Chrome，克隆 profile，以 CDP 模式重新启动"""
-    print('[1/5] 关闭现有 Chrome...')
-    subprocess.run(KILL_CMD, capture_output=True, shell=(SYSTEM == 'Windows'))
-    time.sleep(2)
+    """启动独立的 Chrome CDP 实例 — 不影响你正在使用的 Chrome"""
+    global CDP_PORT
 
-    # 确保 Chrome 彻底关闭
-    if SYSTEM == 'Darwin':
-        subprocess.run(['killall', '-9', 'Google Chrome'], capture_output=True)
-    time.sleep(1)
-
-    print('[2/5] 克隆 Chrome profile（保留登录态）...')
+    # 1. 克隆 profile（保留登录态）
+    print('[1/4] 克隆 Chrome profile（保留 Google 登录态）...')
     if os.path.exists(CHROME_PROFILE_CLONE):
         shutil.rmtree(CHROME_PROFILE_CLONE, ignore_errors=True)
 
     try:
-        shutil.copytree(CHROME_PROFILE_SRC, CHROME_PROFILE_CLONE, symlinks=True)
-        print(f'  源: {CHROME_PROFILE_SRC}')
-        print(f'  目标: {CHROME_PROFILE_CLONE}')
+        # 只复制关键文件，跳过缓存/GPU/Service Worker 等大目录
+        skip_dirs = {
+            'Cache', 'Code Cache', 'Service Worker', 'GPUCache',
+            'DawnCache', 'DawnGraphiteCache', 'GrShaderCache',
+            'ShaderCache', 'WebStorage', 'IndexedDB',
+            'blob_storage', 'File System', 'Platform Notifications',
+            'Sync Data', 'Segmentation Platform',
+        }
+        def _ignore_func(directory, contents):
+            # 只跳过 profile 根目录下的匹配项
+            if directory == CHROME_PROFILE_SRC:
+                return set(c for c in contents if c in skip_dirs)
+            return set()
+
+        shutil.copytree(CHROME_PROFILE_SRC, CHROME_PROFILE_CLONE,
+                        symlinks=True, ignore=_ignore_func)
+        print(f'  ✓ Profile 已克隆到 {CHROME_PROFILE_CLONE}')
     except Exception as e:
         print(f'  ⚠ 克隆失败: {e}')
-        print(f'  将直接使用原始 profile（需要 --disable-features=DevToolsDebuggingRestrictions）')
-        # 回退：直接用原始路径
-        os.environ['USE_ORIGINAL_PROFILE'] = '1'
+        print(f'  回退方案: 关闭现有 Chrome 后使用原始 profile')
+        subprocess.run(KILL_CMD, capture_output=True, shell=(SYSTEM == 'Windows'))
+        if SYSTEM == 'Darwin':
+            subprocess.run(['killall', '-9', 'Google Chrome'], capture_output=True)
+        time.sleep(2)
+        CDP_PORT = _find_free_cdp_port(9222)
+        chrome_args = [
+            CHROME_EXE,
+            f'--remote-debugging-port={CDP_PORT}',
+            f'--user-data-dir={CHROME_PROFILE_SRC}',
+            '--disable-features=DevToolsDebuggingRestrictions',
+        ]
+        subprocess.Popen(chrome_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=(subprocess.CREATE_NEW_CONSOLE if SYSTEM == 'Windows' else 0)
+                         if SYSTEM == 'Windows' else {})
+        time.sleep(4)
+        print(f'  ✓ 已用原始 profile 启动（CDP 端口 {CDP_PORT}）')
+        return True
 
-    print('[3/5] 启动 Chrome CDP...')
+    # 2. 找可用端口
+    CDP_PORT = _find_free_cdp_port(9222)
+    print(f'[2/4] 启动独立 Chrome 实例（CDP 端口 {CDP_PORT}）...')
+
     chrome_args = [
         CHROME_EXE,
         f'--remote-debugging-port={CDP_PORT}',
+        f'--user-data-dir={CHROME_PROFILE_CLONE}',
+        f'--window-position={2000 if SYSTEM == "Darwin" else 3000},200',
+        '--window-size=1200,800',
     ]
 
-    if os.environ.get('USE_ORIGINAL_PROFILE'):
-        chrome_args.append(f'--user-data-dir={CHROME_PROFILE_SRC}')
-        chrome_args.append('--disable-features=DevToolsDebuggingRestrictions')
-    else:
-        chrome_args.append(f'--user-data-dir={CHROME_PROFILE_CLONE}')
-
-    # Windows 不设 stdout/stderr 重定向（没有 DEVNULL 的等价物在所有版本都可靠）
     if SYSTEM == 'Windows':
         subprocess.Popen(chrome_args, creationflags=subprocess.CREATE_NEW_CONSOLE)
     else:
         subprocess.Popen(chrome_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    time.sleep(3)
+    time.sleep(4)
 
-    # 验证 CDP 可用
-    print('[4/5] 验证 CDP...')
-    for i in range(5):
+    # 3. 验证 CDP
+    print('[3/4] 验证 CDP 连接...')
+    for i in range(10):
         try:
             resp = urlopen(f'http://localhost:{CDP_PORT}/json/version', timeout=3)
             data = json.loads(resp.read())
-            print(f'  ✓ CDP OK: {data.get("Browser", "unknown")}')
+            print(f'  ✓ CDP 已就绪: {data.get("Browser", "unknown")}')
             break
         except Exception:
-            if i < 4:
-                print(f'  等待中... ({i+1}/5)')
+            if i < 9:
+                print(f'  等待中... ({i+1}/10)')
                 time.sleep(2)
     else:
-        print('  ✗ CDP 启动失败')
-        print('  提示: 请确保没有其他 Chrome 实例在运行')
+        print('  ✗ CDP 启动失败，请重试')
         return False
 
-    # 提示用户登录
-    print('[5/5] 检查登录状态...')
-    print('  ⚠ 如果浏览器弹出 Google 登录页面，请先在浏览器中完成登录。')
-    print('  ⚠ 登录后，请访问 stitch.withgoogle.com 确保已授权。')
+    print('[4/4] 就绪')
+    print('  💡 这是独立的 Chrome 窗口，请勿关闭')
+    print('  💡 你可以切回自己的 Chrome 继续工作，互不干扰')
     return True
 
 
@@ -247,9 +279,25 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
     print(f'{"="*60}\n')
 
     with sync_playwright() as p:
-        print('→ 连接到 Chrome CDP...')
+        # 自动发现活跃的 CDP 端口
+        active_port = None
+        for port in range(CDP_PORT, CDP_PORT + 20):
+            try:
+                resp = urlopen(f'http://localhost:{port}/json/version', timeout=2)
+                resp.close()
+                active_port = port
+                break
+            except Exception:
+                continue
+
+        if active_port is None:
+            print('✗ 未找到 CDP Chrome 实例')
+            print('  请先运行: python3 stitch.py --launch-chrome')
+            return None
+
+        print(f'→ 连接 Chrome CDP (端口 {active_port})...')
         try:
-            browser = p.chromium.connect_over_cdp(f'http://localhost:{CDP_PORT}')
+            browser = p.chromium.connect_over_cdp(f'http://localhost:{active_port}')
         except Exception as e:
             print(f'✗ 连接失败: {e}')
             print('  请先运行: python3 stitch.py --launch-chrome')
@@ -257,7 +305,7 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
 
         context = browser.contexts[0]
 
-        # 始终从首页开始（确保平台选择可用）
+        # 始终新建独立页面（锁定 page 引用，不受用户切标签页影响）
         print('→ 打开 Stitch 首页...')
         stitch = context.new_page()
         stitch.goto(STITCH_URL, wait_until='domcontentloaded')
@@ -275,6 +323,8 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
             stitch.screenshot(path=output_path, full_page=True)
             return None
 
+        # 锁定 Stitch 页面引用 — 后续所有操作都钉在这个 page 上
+        # 即使你在 Chrome 里切到其他标签页，Playwright 后台操作不受影响
         frame = stitch.frames[1]
 
         # 阶段1: 选择「網頁」(Web) 平台 — 平台选择器是 role="radio" 按钮，仅在首页可见
@@ -409,10 +459,24 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
             stitch.wait_for_timeout(1000)
             typed = editor.text_content() or ''
             print(f'  已输入 {len(typed)} 字符')
+            # 长中文 prompt 键盘输入可能失败（0 字符但不抛异常），走 JS 注入回退
+            if len(typed) < 10:
+                print('  ⚠ 键盘输入不足，改用 JS 注入...')
+                safe_prompt = prompt.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '<br>')
+                frame.evaluate(f"""
+                    const ed = document.querySelector('[contenteditable="true"]');
+                    if (ed) {{
+                        ed.focus();
+                        ed.innerHTML = '<p>{safe_prompt}</p>';
+                        ed.dispatchEvent(new InputEvent('input', {{ bubbles: true }}));
+                    }}
+                """)
+                stitch.wait_for_timeout(1000)
+                typed = editor.text_content() or ''
+                print(f'  JS 注入后: {len(typed)} 字符')
         except Exception as e:
             print(f'  ⚠ 键盘输入失败: {e}')
-            # 回退: JS 注入（注意：JS 注入可能无法触发编辑器的表单验证）
-            safe_prompt = prompt.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '</p><p>')
+            safe_prompt = prompt.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '<br>')
             frame.evaluate(f"""
                 const ed = document.querySelector('[contenteditable="true"]');
                 if (ed) {{
