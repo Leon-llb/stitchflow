@@ -22,11 +22,14 @@
 ## Demo
 
 <p align="center">
-  <a href="demo.mp4?raw=true">
+  <a href="https://github.com/Leon-llb/stitchflow/blob/main/demo.mp4?raw=true">
     <img src="preview.gif" alt="Stitchflow Demo" width="800">
   </a>
 </p>
-<p align="center"><em>Click the GIF to watch the full video →</em></p>
+
+<p align="center">
+  <strong><a href="https://github.com/Leon-llb/stitchflow/blob/main/demo.mp4?raw=true">▶ 观看完整演示视频（18秒）</a></strong>
+</p>
 
 ---
 
