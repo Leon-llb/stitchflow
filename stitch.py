@@ -444,38 +444,42 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
             print(f'  ⚠ 模型切换未完成: {model_result}')
             print('  请在 Stitch 左上角模型选择器中手动切换到最强模型')
 
-        # 阶段3: 输入 prompt（用键盘输入触发编辑器验证）
-        print('→ 输入设计 prompt...')
+        # 阶段3: 输入 prompt（键盘输入 + 完整性校验 + JS 注入回退）
+        print(f'→ 输入设计 prompt（共 {len(prompt)} 字符）...')
         editor = frame.locator('[contenteditable="true"]').first
+
+        # 输入阈值：当键盘输入的字符数达到原 prompt 的 70% 以上就算成功
+        # —— 因为 text_content() 可能因 HTML 标签轻微多算，取比例而非精确匹配
+        min_acceptable = max(10, int(len(prompt) * 0.7))
+
+        typed = ''
         try:
-            editor.click(force=True)  # force=True 绕过可能的弹窗遮挡
+            editor.click(force=True)
             stitch.wait_for_timeout(500)
             # 清空已有内容
             editor.press('Control+a')
             editor.press('Backspace')
-            stitch.wait_for_timeout(300)
-            # 逐字输入（触发 TipTap 编辑器的 input 事件）
-            editor.type(prompt, delay=3)
-            stitch.wait_for_timeout(1000)
+            stitch.wait_for_timeout(500)
+
+            # 逐字输入 — delay=15ms 给 TipTap 编辑器足够时间处理每个中文字符
+            editor.type(prompt, delay=15)
+            # 输入完后等待 3 秒，让编辑器消化所有内容
+            stitch.wait_for_timeout(3000)
+
             typed = editor.text_content() or ''
-            print(f'  已输入 {len(typed)} 字符')
-            # 长中文 prompt 键盘输入可能失败（0 字符但不抛异常），走 JS 注入回退
-            if len(typed) < 10:
-                print('  ⚠ 键盘输入不足，改用 JS 注入...')
-                safe_prompt = prompt.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '<br>')
-                frame.evaluate(f"""
-                    const ed = document.querySelector('[contenteditable="true"]');
-                    if (ed) {{
-                        ed.focus();
-                        ed.innerHTML = '<p>{safe_prompt}</p>';
-                        ed.dispatchEvent(new InputEvent('input', {{ bubbles: true }}));
-                    }}
-                """)
-                stitch.wait_for_timeout(1000)
-                typed = editor.text_content() or ''
-                print(f'  JS 注入后: {len(typed)} 字符')
+            print(f'  键盘输入结果: {len(typed)} 字符 / 期望 {len(prompt)} 字符')
         except Exception as e:
-            print(f'  ⚠ 键盘输入失败: {e}')
+            print(f'  ⚠ 键盘输入异常: {e}')
+
+        # 输入完整性校验：不够就 JS 注入补救
+        if len(typed) < 10:
+            reason = '键盘输入几乎为空' if len(typed) < 10 else ''
+            print(f'  ⚠ {reason}，改用 JS 直接注入...')
+        elif len(typed) < min_acceptable:
+            pct = int(len(typed) / len(prompt) * 100) if prompt else 0
+            print(f'  ⚠ 只输入了 {pct}%（{len(typed)}/{len(prompt)} 字符），用 JS 注入补齐...')
+
+        if len(typed) < min_acceptable:
             safe_prompt = prompt.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '<br>')
             frame.evaluate(f"""
                 const ed = document.querySelector('[contenteditable="true"]');
@@ -485,10 +489,20 @@ def stitch_generate(prompt, output_path='stitch-result.png', export_dir=None):
                     ed.dispatchEvent(new InputEvent('input', {{ bubbles: true }}));
                 }}
             """)
-            stitch.wait_for_timeout(1000)
+            # JS 注入后等待 2 秒让编辑器同步
+            stitch.wait_for_timeout(2000)
+            typed = editor.text_content() or ''
+            print(f'  JS 注入后: {len(typed)} 字符 / 期望 {len(prompt)} 字符')
+
+        # 最终确认：内容不为空才发送
+        if len(typed) < 10:
+            print('  ❌ 输入严重不完整，但继续尝试发送（可能 Stitch 编辑器行为已变）')
+        else:
+            pct = int(len(typed) / len(prompt) * 100) if prompt else 100
+            print(f'  ✓ 输入就绪（{pct}%），准备发送')
 
         # 阶段4: 按 Enter 创建新项目（Stitch 会自动开始生成）
-        print('→ 按 Enter 创建项目（Stitch 将自动开始生成）...')
+        print('→ 按 Enter 创建项目...')
         editor.press('Enter')
         stitch.wait_for_timeout(8000)
 
